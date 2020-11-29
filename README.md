@@ -16,9 +16,6 @@ go run main.go -c sim.conf
 ```
 
 ### Configure File
-
-**sample config file**
-
 ```json
 {
   "localSipPort": 5061,
