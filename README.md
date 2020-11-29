@@ -80,5 +80,5 @@ go run main.go -c sim.conf
 |          devices.name          |                 子设备名称                |
 |      devices.manufacturer      |                 子设备厂商                |
 |          devices.model         |                子设备model                |
-|         devices.address        |                子设备ip地质               |
+|         devices.address        |                子设备ip地址               |
 |         devices.status         |                 子设备状态                |
