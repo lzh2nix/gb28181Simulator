@@ -1,8 +1,10 @@
 package invite
 
 import (
+	"io/ioutil"
 	"math/rand"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -18,9 +20,6 @@ import (
 	"github.com/qiniu/x/xlog"
 
 	"github.com/nareix/joy4/format"
-
-	"github.com/nareix/joy4/av"
-	"github.com/nareix/joy4/av/avutil"
 )
 
 const (
@@ -188,47 +187,50 @@ func (inv *Invite) sendRTPPacket(xlog *xlog.Logger) {
 		rtp = packet.NewRRtpTransfer("", packet.TCPTransferActive, inv.remote.ssrc)
 	}
 	// send ip,port and recv ip,port
-	err := rtp.Service("100.100.34.52", inv.remote.ip, inv.remote.lPort, inv.remote.port)
+	err := rtp.Service(inv.remote.lip, inv.remote.ip, inv.remote.lPort, inv.remote.port)
 	if err != nil {
 		xlog.Info("connect failed, err = ", err)
 	}
-	f, err := avutil.Open("Big_Buck_Bunny_1080_10s_1MB.mp4")
+	f, err := os.Open("xaa")
 	if err != nil {
 		xlog.Errorf("read file error(%v)", err)
 		rtp.Exit()
 		return
 	}
 
-	var pts uint64 = 10000
-	streams, _ := f.Streams()
-	var vindex int8
-	for i, stream := range streams {
-		if stream.Type() == av.H264 {
-			vindex = int8(i)
-			break
-		}
-	}
 	defer func() {
 		f.Close()
 		rtp.Exit()
 	}()
-	for {
-		var pkt av.Packet
-		var err error
-		if pkt, err = f.ReadPacket(); err != nil {
-			xlog.Errorf("read packet error(%v)", err)
-			break
-		}
-		if pkt.Idx != vindex {
-			continue
-		}
-		rtp.Send2data(pkt.Data, pkt.IsKeyFrame, pts)
-		pts += 40
-		time.Sleep(time.Millisecond * 40)
-	}
 
+	buf, _ := ioutil.ReadAll(f)
+	var pts uint64 = 10000
+	for {
+		last := 0
+		for i := 4; i < len(buf); i++ {
+			if isPsHead(buf[i : i+4]) {
+				rtp.Send2data(buf[last:i], false, pts)
+				pts += 40
+				time.Sleep(time.Millisecond * 40)
+				last = i
+			}
+		}
+	}
 	return
 }
+func isPsHead(buf []byte) bool {
+	h := []byte{0, 0, 1, 186}
+	if len(buf) == 4 {
+		for i := 0; i < 4; i++ {
+			if buf[i] != h[i] {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
 func (inv *Invite) ByeMsg(xlog *xlog.Logger, tr *transport.Transport, m *sip.Msg) {
 	// only handle invite idle state
 	if m.IsResponse() {

@@ -88,12 +88,6 @@ func (rtp *RtpTransfer) Exit() {
 }
 
 func (rtp *RtpTransfer) Send2data(data []byte, key bool, pts uint64) {
-	psSys := rtp.psEnc.encPackHeader(pts)
-	if key { // just I frame will add this
-		psSys = rtp.psEnc.encSystemHeader(psSys, 2048, 512)
-		psSys = rtp.psEnc.encProgramStreamMap(psSys)
-	}
-
 	lens := len(data)
 	var index int
 	for lens > 0 {
@@ -101,12 +95,9 @@ func (rtp *RtpTransfer) Send2data(data []byte, key bool, pts uint64) {
 		if pesload > PESLoadLength {
 			pesload = PESLoadLength
 		}
-		pes := rtp.psEnc.encPESPacket(data[index:index+pesload], StreamIDVideo, pesload, pts, pts)
+		pes := data[index : index+pesload]
 
 		// every frame add ps header
-		if index == 0 {
-			pes = append(psSys, pes...)
-		}
 		// remain data to package again
 		// over the max pes len and split more pes load slice
 		index += pesload
