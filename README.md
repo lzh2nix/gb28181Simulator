@@ -5,6 +5,7 @@
 **功能**:
 - [x] Register
 - [x] Register retry
+- [x] Register with 401 challange
 - [x] keepalive
 - [x] catalog
 - [ ] invite
