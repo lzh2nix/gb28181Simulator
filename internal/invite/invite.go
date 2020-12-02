@@ -47,6 +47,7 @@ type Invite struct {
 	state  int32
 	leg    *Leg
 	remote *sdpRemoteInfo
+	rtp    *packet.RtpTransfer
 }
 
 func init() {
@@ -179,28 +180,27 @@ func randomFromStartEnd(min, max int) int {
 	return rand.Intn(max-min+1) + min
 }
 func (inv *Invite) sendRTPPacket(xlog *xlog.Logger) {
-	var rtp *packet.RtpTransfer
 	if inv.remote.proto == "UDP" {
-		rtp = packet.NewRRtpTransfer("", packet.UDPTransfer, inv.remote.ssrc)
+		inv.rtp = packet.NewRRtpTransfer("", packet.UDPTransfer, inv.remote.ssrc)
 	} else {
 		//rtp = packet.NewRRtpTransfer("", packet.UDPTransfer, inv.remote.ssrc)
-		rtp = packet.NewRRtpTransfer("", packet.TCPTransferActive, inv.remote.ssrc)
+		inv.rtp = packet.NewRRtpTransfer("", packet.TCPTransferActive, inv.remote.ssrc)
 	}
 	// send ip,port and recv ip,port
-	err := rtp.Service(inv.remote.lip, inv.remote.ip, inv.remote.lPort, inv.remote.port)
+	err := inv.rtp.Service(inv.remote.lip, inv.remote.ip, inv.remote.lPort, inv.remote.port)
 	if err != nil {
 		xlog.Info("connect failed, err = ", err)
 	}
-	f, err := os.Open("xaa")
+	f, err := os.Open("test.dat")
 	if err != nil {
 		xlog.Errorf("read file error(%v)", err)
-		rtp.Exit()
+		inv.rtp.Exit()
 		return
 	}
 
 	defer func() {
 		f.Close()
-		rtp.Exit()
+		inv.rtp.Exit()
 	}()
 
 	buf, _ := ioutil.ReadAll(f)
@@ -209,9 +209,9 @@ func (inv *Invite) sendRTPPacket(xlog *xlog.Logger) {
 		last := 0
 		for i := 4; i < len(buf); i++ {
 			if isPsHead(buf[i : i+4]) {
-				rtp.SendPSdata(buf[last:i], false, pts)
+				inv.rtp.SendPSdata(buf[last:i], false, pts)
 				pts += 40
-				time.Sleep(time.Millisecond * 40)
+				time.Sleep(time.Millisecond * 50)
 				last = i
 			}
 		}
@@ -235,6 +235,9 @@ func (inv *Invite) ByeMsg(xlog *xlog.Logger, tr *transport.Transport, m *sip.Msg
 	// only handle invite idle state
 	if m.IsResponse() {
 		return
+	}
+	if inv.rtp != nil {
+		inv.rtp.Exit()
 	}
 	xlog.Info("Server------>Bye--->Client")
 	laHost := tr.Conn.LocalAddr().(*net.UDPAddr).IP.String()
