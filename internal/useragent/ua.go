@@ -12,6 +12,7 @@ import (
 	"github.com/jart/gosip/sip"
 	"github.com/lzh2nix/gb28181Simulator/internal/catalog"
 	"github.com/lzh2nix/gb28181Simulator/internal/config"
+	"github.com/lzh2nix/gb28181Simulator/internal/invite"
 	"github.com/lzh2nix/gb28181Simulator/internal/reg"
 	"github.com/lzh2nix/gb28181Simulator/internal/transport"
 	"github.com/qiniu/x/xlog"
@@ -31,6 +32,7 @@ type Service struct {
 
 	regSrv     *reg.Registar
 	catalogSrv *catalog.Catalog
+	inviteSrv  *invite.Invite
 }
 
 func NewService(xlog *xlog.Logger, cfg *config.Config) (*Service, error) {
@@ -40,12 +42,14 @@ func NewService(xlog *xlog.Logger, cfg *config.Config) (*Service, error) {
 	}
 	reg, _ := reg.NewRegistar(cfg)
 	catalog := catalog.NewCatalog(cfg)
+	invite := invite.NewInvite(cfg)
 	go reg.Run(xlog, tr)
 	srv := &Service{
 		tr:         tr,
 		xlog:       xlog,
 		regSrv:     reg,
 		catalogSrv: catalog,
+		inviteSrv:  invite,
 	}
 	return srv, nil
 }
@@ -60,7 +64,8 @@ func msgType(m *sip.Msg) string {
 func (s *Service) HandleIncommingMsg() {
 	s.hookSignals()
 	for m := range s.tr.Recv {
-		if m.IsResponse() && s.regSrv.HandleResponse(m) {
+
+		if m.IsResponse() && s.regSrv.HandleResponse(s.xlog, s.tr, m) {
 			continue
 		}
 		if !m.IsResponse() && m.CSeqMethod == sip.MethodMessage {
@@ -70,6 +75,10 @@ func (s *Service) HandleIncommingMsg() {
 			case Unknow:
 				fmt.Println("unknow msg, msg = ", m)
 			}
+		}
+
+		if m.CSeqMethod == sip.MethodInvite || m.CSeqMethod == sip.MethodBye || m.CSeqMethod == sip.MethodAck {
+			s.inviteSrv.HandleMsg(s.xlog, s.tr, m)
 		}
 	}
 }

@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"bytes"
 	"encoding/xml"
 	"net"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"github.com/lzh2nix/gb28181Simulator/internal/transport"
 	"github.com/lzh2nix/gb28181Simulator/internal/version"
 	"github.com/qiniu/x/xlog"
+	"golang.org/x/net/html/charset"
 )
 
 type Catalog struct {
@@ -41,9 +43,14 @@ func (catalog *Catalog) Handle(xlog *xlog.Logger, tr *transport.Transport, req *
 	time.Sleep(time.Millisecond * 10)
 	// 2. send catalog msg
 	var q catalogQuery
-	if err := xml.Unmarshal(req.Payload.Data(), &q); err != nil {
+	decoder := xml.NewDecoder(bytes.NewReader([]byte(req.Payload.Data())))
+	decoder.CharsetReader = charset.NewReaderLabel
+	if err := decoder.Decode(&q); err != nil {
 		xlog.Errorf("unmarsh xml failed, err = %#v", err, "msg  = ", req)
 		return
+	}
+	if err := xml.Unmarshal(req.Payload.Data(), &q); err != nil {
+
 	}
 	catalogInfo := catalog.sendCatalogResp(xlog, laHost, laPort, q.SN)
 	go func() {

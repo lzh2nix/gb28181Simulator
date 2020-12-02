@@ -2,6 +2,7 @@ package reg
 
 import (
 	"encoding/xml"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -18,7 +19,7 @@ import (
 
 type Leg struct {
 	callID  string
-	FromTag string
+	fromTag string
 }
 type Registar struct {
 	cfg *config.Config
@@ -137,14 +138,14 @@ func (r *Registar) newRegMsg(unReg bool, localHost string, localPort int) *sip.M
 	}
 	if unReg {
 		req.CallID = r.regLeg.callID
-		req.From.Param = &sip.Param{Name: "tag", Value: r.regLeg.FromTag, Next: nil}
+		req.From.Param = &sip.Param{Name: "tag", Value: r.regLeg.fromTag, Next: nil}
 	}
 	r.regLeg = &Leg{req.CallID, req.From.Param.Get("tag").Value}
 	return req
 }
-func (r *Registar) HandleResponse(resp *sip.Msg) bool {
+func (r *Registar) HandleResponse(xl *xlog.Logger, tr *transport.Transport, resp *sip.Msg) bool {
 	if resp.CSeqMethod == sip.MethodRegister {
-		r.handleRegResp(resp)
+		r.handleRegResp(xl, tr, resp)
 		return true
 	}
 	if resp.CSeqMethod == sip.MethodMessage && r.keepAliveLeg(resp) {
@@ -157,17 +158,46 @@ func (r *Registar) HandleResponse(resp *sip.Msg) bool {
 func (r *Registar) keepAliveLeg(resp *sip.Msg) bool {
 	for _, l := range r.keepaliveLegs {
 		if l.callID == resp.CallID &&
-			strings.EqualFold(l.FromTag, resp.From.Param.Get("tag").Value) {
+			strings.EqualFold(l.fromTag, resp.From.Param.Get("tag").Value) {
 			return true
 		}
 	}
 	return false
 }
-func (r *Registar) handleRegResp(resp *sip.Msg) {
+func (r *Registar) handleRegResp(xl *xlog.Logger, tr *transport.Transport, resp *sip.Msg) {
 	if r.regLeg.callID == resp.CallID &&
-		strings.EqualFold(r.regLeg.FromTag, resp.From.Param.Get("tag").Value) &&
-		resp.Expires != 0 {
-		atomic.StoreInt32(&r.registed, 1)
+		strings.EqualFold(r.regLeg.fromTag, resp.From.Param.Get("tag").Value) {
+		if resp.Status == 401 {
+			ch, err := parseChallenge(resp.WWWAuthenticate)
+			if err != nil {
+				xl.Error("prase WWWAuth Header failed ,err = ", err)
+				return
+			}
+			cred := credentials{
+				method:     resp.CSeqMethod,
+				Username:   r.cfg.UserName,
+				password:   r.cfg.Password,
+				Realm:      ch.Realm,
+				Nonce:      ch.Nonce,
+				DigestURI:  resp.From.Uri.String(),
+				Algorithm:  ch.Algorithm,
+				MessageQop: ch.Qop,
+			}
+			fmt.Println("cred = ", cred)
+			laHost := tr.Conn.LocalAddr().(*net.UDPAddr).IP.String()
+			laPort := tr.Conn.LocalAddr().(*net.UDPAddr).Port
+			req := r.newRegMsg(false, laHost, laPort)
+			authHeader, err := cred.authorize()
+			if err != nil {
+				xl.Error("generate www Auth Header failed ,err = ", err)
+				return
+			}
+			req.Authorization = authHeader
+			tr.Send <- req
+		}
+		if resp.Status == 200 && resp.Expires != 0 {
+			atomic.StoreInt32(&r.registed, 1)
+		}
 	}
 }
 
