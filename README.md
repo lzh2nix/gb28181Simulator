@@ -8,7 +8,7 @@
 - [x] Register with 401 challange
 - [x] keepalive
 - [x] catalog
-- [ ] invite
+- [x] invite
 - [ ] as a GB28181 benchmark tool
 ### Quick Start
 
