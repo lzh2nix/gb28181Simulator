@@ -1,7 +1,6 @@
 package invite
 
 import (
-	"fmt"
 	"math/rand"
 	"net"
 	"strconv"
@@ -42,6 +41,7 @@ type sdpRemoteInfo struct {
 	port  int
 	proto string
 	lPort int
+	lip   string
 }
 type Invite struct {
 	cfg    *config.Config
@@ -86,12 +86,14 @@ func (inv *Invite) InviteMsg(xlog *xlog.Logger, tr *transport.Transport, m *sip.
 	if err != nil {
 		xlog.Error("parse sdp failed, err = ", err)
 	}
-	fmt.Println(sdp.Attrs, sdp.Addr, sdp.Video.Port, sdp.Video.Proto, sdp.Session)
+	laHost := tr.Conn.LocalAddr().(*net.UDPAddr).IP.String()
+	laPort := tr.Conn.LocalAddr().(*net.UDPAddr).Port
 	r := &sdpRemoteInfo{
 		ssrc:  ssrc(sdp),
 		ip:    sdp.Addr,
 		port:  int(sdp.Video.Port),
 		lPort: randomFromStartEnd(10000, 65535),
+		lip:   laHost,
 	}
 	if strings.HasPrefix(sdp.Video.Proto, "TCP") {
 		r.proto = "TCP"
@@ -100,8 +102,7 @@ func (inv *Invite) InviteMsg(xlog *xlog.Logger, tr *transport.Transport, m *sip.
 	}
 
 	inv.remote = r
-	laHost := tr.Conn.LocalAddr().(*net.UDPAddr).IP.String()
-	laPort := tr.Conn.LocalAddr().(*net.UDPAddr).Port
+
 	resp := inv.makeRespFromReq(laHost, laPort, m, true, 200)
 	inv.leg = &Leg{m.CallID, m.From.Param.Get("tag").Value, resp.To.Param.Get("tag").Value}
 	atomic.StoreInt32(&inv.state, completed)
@@ -139,7 +140,7 @@ func (inv *Invite) makeRespFromReq(localHost string, localPort int, req *sip.Msg
 				Codecs: []sdp.Codec{{PT: uint8(96), Rate: 90000, Name: "PS"}},
 				Port:   uint16(inv.remote.lPort)},
 			SendOnly: true,
-			Other:    [][2]string{[2]string{"y", strconv.Itoa(inv.remote.ssrc)}},
+			Other:    [][2]string{{"y", strconv.Itoa(inv.remote.ssrc)}},
 		}
 		resp.Payload = sdp
 	} else {
@@ -191,8 +192,6 @@ func (inv *Invite) sendRTPPacket(xlog *xlog.Logger) {
 	if err != nil {
 		xlog.Info("connect failed, err = ", err)
 	}
-	//rtp.Service("100.100.57.239", "101.132.180.234", inv.remote.lPort, 10000)
-
 	f, err := avutil.Open("Big_Buck_Bunny_1080_10s_1MB.mp4")
 	if err != nil {
 		xlog.Errorf("read file error(%v)", err)
@@ -225,7 +224,6 @@ func (inv *Invite) sendRTPPacket(xlog *xlog.Logger) {
 		}
 		rtp.Send2data(pkt.Data, pkt.IsKeyFrame, pts)
 		pts += 40
-		fmt.Println("fdfafdafas")
 		time.Sleep(time.Millisecond * 40)
 	}
 

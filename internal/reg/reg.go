@@ -2,7 +2,6 @@ package reg
 
 import (
 	"encoding/xml"
-	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -183,7 +182,6 @@ func (r *Registar) handleRegResp(xl *xlog.Logger, tr *transport.Transport, resp 
 				Algorithm:  ch.Algorithm,
 				MessageQop: ch.Qop,
 			}
-			fmt.Println("cred = ", cred)
 			laHost := tr.Conn.LocalAddr().(*net.UDPAddr).IP.String()
 			laPort := tr.Conn.LocalAddr().(*net.UDPAddr).Port
 			req := r.newRegMsg(false, laHost, laPort)
