@@ -209,7 +209,7 @@ func (inv *Invite) sendRTPPacket(xlog *xlog.Logger) {
 		last := 0
 		for i := 4; i < len(buf); i++ {
 			if isPsHead(buf[i : i+4]) {
-				rtp.Send2data(buf[last:i], false, pts)
+				rtp.SendPSdata(buf[last:i], false, pts)
 				pts += 40
 				time.Sleep(time.Millisecond * 40)
 				last = i
