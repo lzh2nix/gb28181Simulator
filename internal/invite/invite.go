@@ -204,14 +204,15 @@ func (inv *Invite) sendRTPPacket(xlog *xlog.Logger) {
 	}()
 
 	buf, _ := ioutil.ReadAll(f)
-	var pts uint64 = 10000
+
 	for {
 		last := 0
+		var pts uint64 = 0
 		for i := 4; i < len(buf); i++ {
 			if isPsHead(buf[i : i+4]) {
 				inv.rtp.SendPSdata(buf[last:i], false, pts)
 				pts += 40
-				time.Sleep(time.Millisecond * 50)
+				time.Sleep(time.Millisecond * 40)
 				last = i
 			}
 		}
