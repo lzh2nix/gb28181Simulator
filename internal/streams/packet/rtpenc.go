@@ -8,8 +8,14 @@ import (
 	"strconv"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/qiniu/x/xlog"
 )
+
+var log *xlog.Logger
+
+func init() {
+	log = xlog.New("streams")
+}
 
 //RtpTransfer ...
 type RtpTransfer struct {
@@ -294,7 +300,7 @@ func (rtp *RtpTransfer) write4tcpactive(dstaddr string, port int) {
 			if ok {
 				lens, err := rtp.tcpconn.Write(data)
 				if err != nil || lens != len(data) {
-					log.Errorf("write data by tcp error(%v), len(%v).", err, lens)
+					//					log.Errorf("write data by tcp error(%v), len(%v).", err, lens, len(data))
 					break
 				}
 
@@ -302,9 +308,6 @@ func (rtp *RtpTransfer) write4tcpactive(dstaddr string, port int) {
 				log.Errorf("data channel closed")
 				break
 			}
-		case <-rtp.timerProcess.C:
-			log.Error("channel write data timeout when tcp send")
-			break
 		case <-rtp.writestop:
 			log.Error("tcp rtp send channel stop")
 			break

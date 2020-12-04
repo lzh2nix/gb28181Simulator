@@ -48,6 +48,7 @@ type Invite struct {
 	leg    *Leg
 	remote *sdpRemoteInfo
 	rtp    *packet.RtpTransfer
+	byed   chan bool
 }
 
 func init() {
@@ -55,7 +56,7 @@ func init() {
 }
 func NewInvite(cfg *config.Config) *Invite {
 	rand.Seed(time.Now().UnixNano())
-	return &Invite{cfg: cfg, state: idle}
+	return &Invite{cfg: cfg, state: idle, byed: make(chan bool)}
 }
 
 func (inv *Invite) HandleMsg(xlog *xlog.Logger, tr *transport.Transport, m *sip.Msg) {
@@ -201,23 +202,34 @@ func (inv *Invite) sendRTPPacket(xlog *xlog.Logger) {
 	defer func() {
 		f.Close()
 		inv.rtp.Exit()
+		inv.rtp = nil
 	}()
 
 	buf, _ := ioutil.ReadAll(f)
-
 	for {
-		last := 0
-		var pts uint64 = 0
-		for i := 4; i < len(buf); i++ {
-			if isPsHead(buf[i : i+4]) {
-				inv.rtp.SendPSdata(buf[last:i], false, pts)
-				pts += 40
-				time.Sleep(time.Millisecond * 40)
-				last = i
-			}
+		select {
+		case <-inv.byed:
+			break
+		default:
+			inv.sendFile(buf)
+		}
+
+	}
+}
+func (inv *Invite) sendFile(buf []byte) {
+	last := 0
+	var pts uint64 = 0
+	for i := 4; i < len(buf); i++ {
+		if inv.state == idle {
+			return
+		}
+		if isPsHead(buf[i : i+4]) {
+			inv.rtp.SendPSdata(buf[last:i], false, pts)
+			pts += 40
+			time.Sleep(time.Millisecond * 40)
+			last = i
 		}
 	}
-	return
 }
 func isPsHead(buf []byte) bool {
 	h := []byte{0, 0, 1, 186}
@@ -237,9 +249,6 @@ func (inv *Invite) ByeMsg(xlog *xlog.Logger, tr *transport.Transport, m *sip.Msg
 	if m.IsResponse() {
 		return
 	}
-	if inv.rtp != nil {
-		inv.rtp.Exit()
-	}
 	xlog.Info("Server------>Bye--->Client")
 	laHost := tr.Conn.LocalAddr().(*net.UDPAddr).IP.String()
 	laPort := tr.Conn.LocalAddr().(*net.UDPAddr).Port
@@ -256,4 +265,5 @@ func (inv *Invite) ByeMsg(xlog *xlog.Logger, tr *transport.Transport, m *sip.Msg
 	atomic.StoreInt32(&inv.state, idle)
 	xlog.Info("Client------>200OK(Bye)--->Server")
 	tr.Send <- resp
+	inv.byed <- true
 }
