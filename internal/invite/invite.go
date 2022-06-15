@@ -126,6 +126,13 @@ func (inv *Invite) makeRespFromReq(localHost string, localPort int, req *sip.Msg
 			Port:     uint16(localPort),
 			Param:    &sip.Param{Name: "branch", Value: req.Via.Param.Get("branch").Value},
 		},
+		Contact: &sip.Addr{
+			Uri: &sip.URI{
+				User: req.To.Uri.User,
+				Host: localHost,
+				Port: uint16(localPort),
+			},
+		},
 	}
 
 	if invite && code == 200 {
@@ -156,7 +163,7 @@ func (inv *Invite) makeRespFromReq(localHost string, localPort int, req *sip.Msg
 func ssrc(sdp *sdp.SDP) int {
 	for _, i := range sdp.Other {
 		if i[0] == "y" {
-			ssrc, _ := strconv.ParseInt(i[1], 10, 64)
+			ssrc, _ := strconv.ParseInt(strings.Trim(i[1], "\n"), 10, 64)
 			return int(ssrc)
 		}
 	}
